@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /build
 COPY pyproject.toml .
@@ -7,7 +7,7 @@ COPY src/ ./src/
 RUN pip install --no-cache-dir build \
     && python -m build --wheel --outdir /dist
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Безопасность: non-root пользователь
 RUN groupadd -r mcp && useradd -r -g mcp -d /app -s /sbin/nologin mcp
