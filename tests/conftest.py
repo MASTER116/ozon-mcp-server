@@ -344,3 +344,32 @@ CREATE_PRODUCT_RESPONSE = {
         "product_id": 0,
     }
 }
+
+
+@pytest.fixture()
+def mock_app_context(
+    test_settings: Settings,
+    mock_ozon_client: AsyncMock,
+    mock_cache: RedisCache,
+    mock_rate_limiter: RateLimiter,
+    mock_audit: AsyncMock,
+) -> Any:
+    """AppContext assembled from mock components."""
+    from ozon_mcp_server.server import AppContext
+
+    return AppContext(
+        settings=test_settings,
+        ozon=mock_ozon_client,
+        cache=mock_cache,
+        rate_limiter=mock_rate_limiter,
+        audit=mock_audit,
+        db=MagicMock(),
+    )
+
+
+@pytest.fixture()
+def mock_ctx(mock_app_context: Any) -> MagicMock:
+    """Mock MCP Context with AppContext in lifespan_context."""
+    ctx = MagicMock()
+    ctx.request_context.lifespan_context = mock_app_context
+    return ctx

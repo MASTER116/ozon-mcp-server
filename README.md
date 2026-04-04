@@ -179,6 +179,29 @@ See [SECURITY.md](SECURITY.md) for the full threat model and vulnerability repor
 
 ---
 
+## Testing
+
+**157 tests** with **83% code coverage** (threshold: 80%):
+
+```bash
+uv run pytest -v
+```
+
+| Test Suite | Tests | Covers |
+|------------|-------|--------|
+| Security (SSRF, injection, credentials) | 20 | `api/client.py`, `middleware/*`, `models/*` |
+| Product tools (list, info, stocks, prices, create, archive) | 19 | `tools/product_tools.py` — 98% |
+| Order tools (FBS, FBO, analytics, finance, warehouses) | 14 | `tools/order_tools.py` — 100% |
+| Model validation (products, orders, common) | 40 | `models/*` — 93–100% |
+| API client (SSRF, circuit breaker, errors) | 9 | `api/client.py` |
+| Cache (Redis get/set/invalidate) | 7 | `cache/redis_cache.py` |
+| Middleware (auth, rate limit, security) | 17 | `middleware/*` — 81–100% |
+| Server (AppContext, MCP instance, resources) | 5 | `server.py` |
+
+All external dependencies (Redis, PostgreSQL, Ozon API) are fully mocked — no infrastructure required to run tests.
+
+---
+
 ## Development
 
 ```bash
@@ -196,7 +219,7 @@ uv run mypy src/
 uv run bandit -r src/ -c pyproject.toml
 uv run pip-audit
 
-# Run tests
+# Run tests with coverage
 uv run pytest -v
 
 # Pre-commit hooks
@@ -209,4 +232,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
 
 ## License
 
-[MIT](LICENSE) — Azat KH
+[MIT](LICENSE) — Азат Халяфиев (Azat Khaliafiev)
