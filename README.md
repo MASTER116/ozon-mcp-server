@@ -89,7 +89,8 @@ cd ozon-mcp-server
 
 # Configure environment
 cp .env.example .env
-# Edit .env with your Ozon API credentials (Client-Id and Api-Key from seller dashboard)
+# Edit .env — set OZON_CLIENT_ID, OZON_API_KEY (from seller dashboard)
+# and POSTGRES_PASSWORD (required, no default)
 
 # Start with Docker Compose (includes Redis + PostgreSQL)
 docker compose up -d
@@ -98,6 +99,8 @@ docker compose up -d
 uv sync --dev
 uv run python -m ozon_mcp_server
 ```
+
+> **Note:** No passwords or secrets are stored in the repository. All credentials must be provided via `.env` file (which is in `.gitignore` and never committed).
 
 ### Claude Desktop Configuration
 
@@ -203,13 +206,17 @@ docker compose -f docker-compose.prod.yml --profile maintenance run --rm pg-back
 docker compose -f docker-compose.prod.yml --profile maintenance run --rm audit-cleanup
 ```
 
-**Production features** (vs dev docker-compose):
-- Redis authentication (`requirepass`) + dangerous commands disabled
-- PostgreSQL `scram-sha-256` auth + init script with indexes
-- Network isolation — only `ozon-mcp` is exposed, DB/Redis are internal
-- Resource limits (CPU + memory) per container
-- Log rotation (json-file driver with max-size)
-- Scheduled audit cleanup (90 days retention) and PostgreSQL backups
+**Production security** (vs dev docker-compose):
+- **Zero hardcoded passwords** — all secrets via `.env` (never committed to git)
+- **Redis**: `requirepass` + `CONFIG`, `KEYS`, `FLUSHDB`, `FLUSHALL`, `DEBUG` disabled
+- **PostgreSQL**: `scram-sha-256` auth + init script with indexes
+- **Network isolation** — MCP port on `127.0.0.1` only, DB/Redis on internal network
+- **Container hardening** — `cap_drop: ALL`, `no-new-privileges`, `read_only` filesystem
+- **Resource limits** (CPU + memory) per container
+- **Log rotation** (json-file driver with max-size)
+- **Audit cleanup** (90-day retention) and **PostgreSQL backups** (maintenance profile)
+
+See [SECURITY.md](SECURITY.md) for the full production hardening checklist.
 
 ---
 

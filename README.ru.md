@@ -89,7 +89,8 @@ cd ozon-mcp-server
 
 # Настройка окружения
 cp .env.example .env
-# Отредактируйте .env — укажите Client-Id и Api-Key из кабинета продавца Ozon
+# Отредактируйте .env — укажите OZON_CLIENT_ID, OZON_API_KEY (из кабинета продавца)
+# и POSTGRES_PASSWORD (обязательно, дефолта нет)
 
 # Запуск через Docker Compose (включает Redis + PostgreSQL)
 docker compose up -d
@@ -98,6 +99,8 @@ docker compose up -d
 uv sync --dev
 uv run python -m ozon_mcp_server
 ```
+
+> **Примечание:** В репозитории нет ни одного пароля или секрета. Все учётные данные передаются через файл `.env` (добавлен в `.gitignore`, никогда не коммитится).
 
 ### Настройка Claude Desktop
 
@@ -203,13 +206,17 @@ docker compose -f docker-compose.prod.yml --profile maintenance run --rm pg-back
 docker compose -f docker-compose.prod.yml --profile maintenance run --rm audit-cleanup
 ```
 
-**Отличия продакшн-конфигурации от dev:**
-- Redis с аутентификацией (`requirepass`) + опасные команды отключены
-- PostgreSQL `scram-sha-256` + init-скрипт с индексами
-- Сетевая изоляция — наружу только `ozon-mcp`, БД и Redis на внутренней сети
-- Лимиты ресурсов (CPU + память) на каждый контейнер
-- Ротация логов (json-file driver с max-size)
-- Очистка аудит-логов (хранение 90 дней) и бэкапы PostgreSQL
+**Безопасность продакшн-конфигурации** (отличия от dev):
+- **Ноль захардкоженных паролей** — все секреты через `.env` (никогда не коммитится в git)
+- **Redis**: `requirepass` + отключены `CONFIG`, `KEYS`, `FLUSHDB`, `FLUSHALL`, `DEBUG`
+- **PostgreSQL**: `scram-sha-256` + init-скрипт с индексами
+- **Сетевая изоляция** — MCP-порт только на `127.0.0.1`, БД и Redis на внутренней сети
+- **Хардинг контейнеров** — `cap_drop: ALL`, `no-new-privileges`, `read_only` файловая система
+- **Лимиты ресурсов** (CPU + память) на каждый контейнер
+- **Ротация логов** (json-file driver с max-size)
+- **Очистка аудит-логов** (хранение 90 дней) и **бэкапы PostgreSQL** (maintenance профиль)
+
+Полный чеклист: [SECURITY.md](SECURITY.md) — Production Hardening Checklist.
 
 ---
 
