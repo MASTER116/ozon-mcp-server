@@ -10,7 +10,7 @@ services:
     environment:
       - OZON_CLIENT_ID=${OZON_CLIENT_ID}
       - OZON_API_KEY=${OZON_API_KEY}
-      - POSTGRES_DSN=postgresql://ozon:${POSTGRES_PASSWORD:-secret}@postgres:5432/ozon_mcp
+      - POSTGRES_DSN=postgresql://ozon:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/ozon_mcp
       - REDIS_URL=redis://redis:6379/0
       - TRANSPORT=${TRANSPORT:-stdio}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -30,7 +30,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ozon
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ozon_mcp
     volumes:
       - pgdata:/var/lib/postgresql/data
