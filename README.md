@@ -179,6 +179,40 @@ See [SECURITY.md](SECURITY.md) for the full threat model and vulnerability repor
 
 ---
 
+## Production Deployment
+
+```bash
+# 1. Copy and fill production config
+cp .env.production.example .env
+
+# Generate strong passwords:
+#   openssl rand -base64 32   (for POSTGRES_PASSWORD, REDIS_PASSWORD)
+#   openssl rand -hex 32      (for MCP_AUTH_TOKEN)
+
+# 2. Start all services
+docker compose -f docker-compose.prod.yml up -d
+
+# 3. Check health
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs ozon-mcp
+
+# 4. Run database backup (manual)
+docker compose -f docker-compose.prod.yml --profile maintenance run --rm pg-backup
+
+# 5. Run audit cleanup (manual)
+docker compose -f docker-compose.prod.yml --profile maintenance run --rm audit-cleanup
+```
+
+**Production features** (vs dev docker-compose):
+- Redis authentication (`requirepass`) + dangerous commands disabled
+- PostgreSQL `scram-sha-256` auth + init script with indexes
+- Network isolation — only `ozon-mcp` is exposed, DB/Redis are internal
+- Resource limits (CPU + memory) per container
+- Log rotation (json-file driver with max-size)
+- Scheduled audit cleanup (90 days retention) and PostgreSQL backups
+
+---
+
 ## Testing
 
 **157 tests** with **83% code coverage** (threshold: 80%):

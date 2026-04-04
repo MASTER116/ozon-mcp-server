@@ -1,0 +1,187 @@
+version: "3.9"
+
+# Production Docker Compose for Ozon MCP Server
+# Usage: docker compose -f docker-compose.prod.yml up -d
+# Requires: .env file with production secrets
+
+services:
+  ozon-mcp:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+    environment:
+      - OZON_CLIENT_ID=${OZON_CLIENT_ID}
+      - OZON_API_KEY=${OZON_API_KEY}
+      - POSTGRES_DSN=postgresql://ozon:${POSTGRES_PASSWORD}@postgres:5432/ozon_mcp
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - TRANSPORT=${TRANSPORT:-streamable-http}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN}
+      - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-100}
+      - RATE_LIMIT_WRITE_RPM=${RATE_LIMIT_WRITE_RPM:-10}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 128M
+          cpus: "0.25"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ozon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ozon_mcp
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ozon -d ozon_mcp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+        reservations:
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "3"
+    networks:
+      - backend
+    # PostgreSQL is NOT exposed to the host — only accessible from backend network
+
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+      --tcp-keepalive 60
+      --timeout 300
+      --rename-command FLUSHDB ""
+      --rename-command FLUSHALL ""
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+          cpus: "0.5"
+        reservations:
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - backend
+    # Redis is NOT exposed to the host — only accessible from backend network
+
+  # Scheduled audit cleanup (runs daily at 3 AM)
+  audit-cleanup:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import asyncio, asyncpg, os
+        async def cleanup():
+            pool = await asyncpg.create_pool(os.environ['POSTGRES_DSN'], min_size=1, max_size=2)
+            result = await pool.execute(
+                "DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL '90 days'"
+            )
+            print(f"Audit cleanup: {result}")
+            await pool.close()
+        asyncio.run(cleanup())
+    environment:
+      - POSTGRES_DSN=postgresql://ozon:${POSTGRES_PASSWORD}@postgres:5432/ozon_mcp
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    profiles: ["maintenance"]
+    networks:
+      - backend
+
+  # PostgreSQL backup (weekly, kept for 30 days)
+  pg-backup:
+    image: postgres:16-alpine
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        BACKUP_FILE="/backups/ozon_mcp_$(date +%Y%m%d_%H%M%S).sql.gz"
+        PGPASSWORD=$${POSTGRES_PASSWORD} pg_dump -h postgres -U ozon -d ozon_mcp | gzip > $${BACKUP_FILE}
+        echo "Backup created: $${BACKUP_FILE}"
+        # Remove backups older than 30 days
+        find /backups -name "*.sql.gz" -mtime +30 -delete
+        echo "Old backups cleaned up"
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - pgbackups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    profiles: ["maintenance"]
+    networks:
+      - backend
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  pgbackups:
+    driver: local
+
+networks:
+  backend:
+    driver: bridge
+    internal: false  # ozon-mcp needs external access to api-seller.ozon.ru

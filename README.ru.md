@@ -179,6 +179,40 @@ uv run python -m ozon_mcp_server
 
 ---
 
+## Продакшн-деплой
+
+```bash
+# 1. Скопировать и заполнить продакшн-конфигурацию
+cp .env.production.example .env
+
+# Сгенерировать надёжные пароли:
+#   openssl rand -base64 32   (для POSTGRES_PASSWORD, REDIS_PASSWORD)
+#   openssl rand -hex 32      (для MCP_AUTH_TOKEN)
+
+# 2. Запустить все сервисы
+docker compose -f docker-compose.prod.yml up -d
+
+# 3. Проверить состояние
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs ozon-mcp
+
+# 4. Бэкап базы данных (вручную)
+docker compose -f docker-compose.prod.yml --profile maintenance run --rm pg-backup
+
+# 5. Очистка аудит-логов (вручную)
+docker compose -f docker-compose.prod.yml --profile maintenance run --rm audit-cleanup
+```
+
+**Отличия продакшн-конфигурации от dev:**
+- Redis с аутентификацией (`requirepass`) + опасные команды отключены
+- PostgreSQL `scram-sha-256` + init-скрипт с индексами
+- Сетевая изоляция — наружу только `ozon-mcp`, БД и Redis на внутренней сети
+- Лимиты ресурсов (CPU + память) на каждый контейнер
+- Ротация логов (json-file driver с max-size)
+- Очистка аудит-логов (хранение 90 дней) и бэкапы PostgreSQL
+
+---
+
 ## Тестирование
 
 **157 тестов** с покрытием **83%** (порог: 80%):
