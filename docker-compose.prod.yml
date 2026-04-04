@@ -10,7 +10,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     ports:
-      - "${MCP_PORT:-8000}:8000"
+      - "127.0.0.1:${MCP_PORT:-8000}:8000"  # localhost only — use reverse proxy for external access
     environment:
       - OZON_CLIENT_ID=${OZON_CLIENT_ID}
       - OZON_API_KEY=${OZON_API_KEY}
@@ -32,6 +32,8 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     deploy:
       resources:
         limits:
@@ -47,12 +49,6 @@ services:
         max-file: "5"
     networks:
       - backend
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
 
   postgres:
     image: postgres:16-alpine
@@ -70,6 +66,16 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     deploy:
       resources:
         limits:
@@ -98,14 +104,24 @@ services:
       --timeout 300
       --rename-command FLUSHDB ""
       --rename-command FLUSHALL ""
+      --rename-command CONFIG ""
+      --rename-command KEYS ""
+      --rename-command DEBUG ""
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
     deploy:
       resources:
         limits:
@@ -122,7 +138,7 @@ services:
       - backend
     # Redis is NOT exposed to the host — only accessible from backend network
 
-  # Scheduled audit cleanup (runs daily at 3 AM)
+  # Audit log cleanup (90-day retention)
   audit-cleanup:
     build:
       context: .
@@ -145,11 +161,16 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     profiles: ["maintenance"]
     networks:
       - backend
 
-  # PostgreSQL backup (weekly, kept for 30 days)
+  # PostgreSQL backup (kept for 30 days)
   pg-backup:
     image: postgres:16-alpine
     entrypoint: ["/bin/sh", "-c"]
@@ -157,8 +178,8 @@ services:
       - |
         BACKUP_FILE="/backups/ozon_mcp_$(date +%Y%m%d_%H%M%S).sql.gz"
         PGPASSWORD=$${POSTGRES_PASSWORD} pg_dump -h postgres -U ozon -d ozon_mcp | gzip > $${BACKUP_FILE}
+        chmod 600 $${BACKUP_FILE}
         echo "Backup created: $${BACKUP_FILE}"
-        # Remove backups older than 30 days
         find /backups -name "*.sql.gz" -mtime +30 -delete
         echo "Old backups cleaned up"
     environment:
@@ -169,6 +190,13 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
     profiles: ["maintenance"]
     networks:
       - backend

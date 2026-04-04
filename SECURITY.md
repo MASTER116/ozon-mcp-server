@@ -6,7 +6,7 @@ If you discover a security vulnerability, please report it responsibly:
 
 1. **DO NOT** open a public GitHub issue
 2. Email: [security contact — create a GitHub Security Advisory instead]
-3. Use [GitHub Security Advisories](https://github.com/YOUR_USERNAME/ozon-mcp-server/security/advisories/new)
+3. Use [GitHub Security Advisories](https://github.com/MASTER116/ozon-mcp-server/security/advisories/new)
 
 We will respond within 48 hours.
 
@@ -49,6 +49,49 @@ This MCP server handles **real e-commerce operations** (pricing, inventory, orde
 | MCP08: Lack of Audit | ✅ Mitigated | PostgreSQL audit log |
 | MCP09: Shadow MCP Servers | ⚠️ Partial | Docker-only deployment recommended |
 | MCP10: Context Over-Sharing | ✅ Mitigated | Output sanitization, credential filtering |
+
+## Production Hardening Checklist
+
+Before deploying to production, verify each item:
+
+### Secrets
+- [ ] `OZON_API_KEY` — unique per environment, rotated every 180 days
+- [ ] `POSTGRES_PASSWORD` — generated via `openssl rand -base64 32`, not reused
+- [ ] `REDIS_PASSWORD` — generated via `openssl rand -base64 32`, not reused
+- [ ] `MCP_AUTH_TOKEN` — set for `streamable-http` transport (required if exposed to network)
+- [ ] `.env` file has `chmod 600` permissions (owner-only read/write)
+- [ ] `.env` is in `.gitignore` and never committed
+
+### Docker
+- [ ] Use `docker-compose.prod.yml` (not the dev compose file)
+- [ ] All containers have `cap_drop: ALL` + only required capabilities added back
+- [ ] `no-new-privileges: true` on all containers
+- [ ] `read_only: true` on application containers
+- [ ] MCP port bound to `127.0.0.1` (use reverse proxy like nginx/caddy for external access)
+- [ ] PostgreSQL and Redis are NOT exposed to host (internal network only)
+- [ ] Resource limits (memory + CPU) are set on all containers
+
+### Redis
+- [ ] `requirepass` is set with a strong password
+- [ ] Dangerous commands disabled: `FLUSHDB`, `FLUSHALL`, `CONFIG`, `KEYS`, `DEBUG`
+- [ ] AOF persistence enabled for rate limit state durability
+
+### PostgreSQL
+- [ ] `scram-sha-256` authentication (set via `POSTGRES_INITDB_ARGS`)
+- [ ] Init script creates audit table with indexes on first start
+- [ ] Regular backups configured (use `pg-backup` maintenance profile)
+- [ ] Audit cleanup configured (90-day retention via `audit-cleanup` profile)
+
+### Network
+- [ ] Reverse proxy (nginx/caddy) with TLS for external `streamable-http` access
+- [ ] Firewall: only ports 80/443 (reverse proxy) open to the internet
+- [ ] Docker internal network isolates DB and Redis from external access
+
+### Monitoring
+- [ ] Container health checks are active (`docker compose ps`)
+- [ ] Log rotation is configured (json-file driver with max-size)
+- [ ] Alert on circuit breaker open events (search for `circuit_breaker_opened` in logs)
+- [ ] Alert on rate limit exceeded events (search for `rate_limit_exceeded` in logs)
 
 ## Security Testing
 
