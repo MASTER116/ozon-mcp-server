@@ -20,12 +20,18 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # --- Demo Mode ---
+    demo_mode: bool = Field(
+        default=False,
+        description="Run with mock data (no Ozon API, Redis, or PostgreSQL needed)",
+    )
+
     # --- Ozon API ---
     ozon_client_id: str = Field(
-        ..., description="Ozon Seller Client-Id (from seller dashboard)"
+        default="", description="Ozon Seller Client-Id (from seller dashboard)"
     )
     ozon_api_key: SecretStr = Field(
-        ..., description="Ozon Seller API Key (180-day expiry)"
+        default=SecretStr(""), description="Ozon Seller API Key (180-day expiry)"
     )
     ozon_api_base_url: str = Field(
         default="https://api-seller.ozon.ru",

@@ -48,8 +48,34 @@ class AppContext:
 
 
 @asynccontextmanager
-async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
-    """Manage application lifecycle: database, cache, and HTTP client connections."""
+async def _demo_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
+    """Demo mode lifespan — no external dependencies needed."""
+    from ozon_mcp_server.demo import DemoAuditLogger, DemoCache, DemoOzonClient, DemoRateLimiter
+
+    settings = get_settings()
+    logger.info(
+        "server_started",
+        server_name=settings.server_name,
+        transport=settings.transport,
+        mode="DEMO",
+    )
+
+    try:
+        yield AppContext(
+            settings=settings,
+            ozon=DemoOzonClient(),  # type: ignore[arg-type]
+            cache=DemoCache(),  # type: ignore[arg-type]
+            rate_limiter=DemoRateLimiter(),  # type: ignore[arg-type]
+            audit=DemoAuditLogger(),  # type: ignore[arg-type]
+            db=None,  # type: ignore[arg-type]
+        )
+    finally:
+        logger.info("server_stopped", mode="DEMO")
+
+
+@asynccontextmanager
+async def _production_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
+    """Production lifespan — requires Redis, PostgreSQL, and Ozon API keys."""
     settings = get_settings()
 
     # PostgreSQL connection pool
@@ -97,6 +123,18 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
         await redis_client.close()
         await db_pool.close()
         logger.info("server_stopped")
+
+
+@asynccontextmanager
+async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
+    """Select demo or production lifespan based on DEMO_MODE setting."""
+    settings = get_settings()
+    if settings.demo_mode:
+        async with _demo_lifespan(server) as ctx:
+            yield ctx
+    else:
+        async with _production_lifespan(server) as ctx:
+            yield ctx
 
 
 # --- MCP server initialization ---
