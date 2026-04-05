@@ -40,11 +40,7 @@ def main() -> None:
         port=settings.port if settings.transport != "stdio" else None,
     )
 
-    kwargs: dict[str, object] = {"transport": settings.transport}
-    if settings.transport in ("streamable-http", "sse"):
-        kwargs["port"] = settings.port
-
-    mcp.run(**kwargs)  # type: ignore[arg-type]
+    mcp.run(transport=settings.transport)  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":
