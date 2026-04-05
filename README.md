@@ -102,6 +102,16 @@ uv run python -m ozon_mcp_server
 
 > **Note:** No passwords or secrets are stored in the repository. All credentials must be provided via `.env` file (which is in `.gitignore` and never committed).
 
+### Demo Mode (no Ozon API keys needed)
+
+Try all 13 tools with realistic mock data — no Ozon seller account, Redis, or PostgreSQL required:
+
+```bash
+DEMO_MODE=true uv run python -m ozon_mcp_server
+```
+
+Demo includes 5 products (AirPods, Dyson, JBL, Nike, Samsonite), 4 orders across 4 cities, 3 warehouses, sales analytics (2.1M RUB / 150 orders), and financial reports.
+
 ### Claude Desktop Configuration
 
 Add to your `claude_desktop_config.json`:
