@@ -11,6 +11,8 @@
 
 [English](README.md) | [Русский](README.ru.md)
 
+![Демо](demo.gif)
+
 ---
 
 ## Зачем этот проект
