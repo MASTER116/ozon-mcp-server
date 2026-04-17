@@ -70,7 +70,7 @@ jobs:
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --dev
       - run: uv run pytest --cov=src/ozon_mcp_server --cov-report=xml -v
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v6
         if: always()
         with:
           file: coverage.xml
